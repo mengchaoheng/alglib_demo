@@ -1,3 +1,7 @@
+#include <iostream>
+#include <fstream>
+#include <vector>
+#include <sstream>
 #include "stdafx.h"
 #include <stdlib.h>
 #include <stdio.h>
@@ -12,167 +16,118 @@ extern "C" {
                             float u[4], float *z, unsigned int *iters);
 }
 
-#include <iostream>
 #define AE_NO_EXCEPTIONS
 using namespace alglib;
 
 int main(int argc, char **argv)
 {
-    // try
-    // {
-    //
-    // This example demonstrates how to minimize
-    //
-    //     F(x0,x1) = -0.1*x0 - x1
-    //
-    // subject to box constraints
-    //
-    //     -1 <= x0,x1 <= +1 
-    //
-    // and general linear constraints
-    //
-    //     x0 - x1 >= -1
-    //     x0 + x1 <=  1
-    //
-    // We use dual simplex solver provided by ALGLIB for this task. Box
-    // constraints are specified by means of constraint vectors bndl and
-    // bndu (we have bndl<=x<=bndu). General linear constraints are
-    // specified as AL<=A*x<=AU, with AL/AU being 2x1 vectors and A being
-    // 2x2 matrix.
-    //
-    // NOTE: some/all components of AL/AU can be +-INF, same applies to
-    //       bndl/bndu. You can also have AL[I]=AU[i] (as well as
-    //       BndL[i]=BndU[i]).
-    //
-        // real_2d_array a = "[[1,-1],[1,+1]]";
-        // real_1d_array al = "[-1,-inf]";
-        // real_1d_array au = "[+inf,+1]";
-        // real_1d_array c = "[-0.1,-1]";
-        // real_1d_array s = "[1,1]";
-        // real_1d_array bndl = "[-1,-1]";
-        // real_1d_array bndu = "[+1,+1]";
-        // real_1d_array x;
-        // minlpstate state;
-        // minlpreport rep;
+    std::ifstream file("../../data.csv");
+    std::vector<std::vector<double> > data;
+    std::string line;
+ 
+    if (file.is_open()) {
+        while (std::getline(file, line)) {
+            std::istringstream sline(line);
+            std::vector<double> row;
+            std::string value;
+ 
+            while (std::getline(sline, value, ',')) {
+                row.push_back(std::stod(value));
+            }
+ 
+            data.push_back(row);
+        }
+        file.close();
+    } else {
+        std::cerr << "Unable to open file" << std::endl;
+        return 1;
+    }
+ 
+    // 假设所有行的列数都相同，将第一行的列数作为数组的大小
+    size_t columns = data[0].size();
+    size_t num = data.size();
+    double** array = new double*[data.size()];
+    for (size_t i = 0; i < data.size(); ++i) {
+        array[i] = new double[columns];
+        for (size_t j = 0; j < columns; ++j) {
+            array[i][j] = data[i][j];
+        }
+    }
 
-        // minlpcreate(2, state);
+    // 打开CSV文件进行写入
+    std::ofstream outFile("../../output.csv");
+    if (!outFile.is_open()) {
+        std::cerr << "无法打开文件" << std::endl;
+        return 1;
+    }
 
-    //
-    // Set cost vector, box constraints, general linear constraints.
-    //
-    // Box constraints can be set in one call to minlpsetbc() or minlpsetbcall()
-    // (latter sets same constraints for all variables and accepts two scalars
-    // instead of two vectors).
-    //
-    // General linear constraints can be specified in several ways:
-    // * minlpsetlc2dense() - accepts dense 2D array as input; sometimes this
-    //   approach is more convenient, although less memory-efficient.
-    // * minlpsetlc2() - accepts sparse matrix as input
-    // * minlpaddlc2dense() - appends one row to the current set of constraints;
-    //   row being appended is specified as dense vector
-    // * minlpaddlc2() - appends one row to the current set of constraints;
-    //   row being appended is specified as sparse set of elements
-    // Independently from specific function being used, LP solver uses sparse
-    // storage format for internal representation of constraints.
-    //
-        // minlpsetcost(state, c);
-        // minlpsetbc(state, bndl, bndu);
-        // minlpsetlc2dense(state, a, al, au, 2);
+    
+    const float _B[3][4] = { {-0.4440,0.0,0.4440,0.0}, {0.0,-0.4440,0.0,0.4440},{0.2070,0.2070,0.2070,0.2070}};
+    float B[12];
+    for (int i = 0; i < 3; i++)
+    {
+        for(int j=0;j<4;j++)
+        {
+            B[i+3*j] = _B[i][j];
+        }
+    }
+    // %% but we use the Standard Forms for Linear Programming Problems
+    // % min c'x subj. to A*x =b
+    // %                  0 <= x
+    // %% so we have to reformula the direction-preserving control allocation
+    // % problem to:
+    // % min z=[0; -1]'[u; a]   s.t.  [B -v][u; a] = 0
+    // %                                umin <= u <= umax
+    // %                                   0 <= a
+    // % and set x=u-umin, then
+    // % min z=[0; -1]'[x; a]   s.t.  [B -v][x; a] = -B*umin
+    // %                                0 <= x <= umax-umin
+    // %                                0 <= a
+    // B=[-0.4440         0    0.4440         0;
+    //       0   -0.4440         0    0.4440;
+    //    0.2070    0.2070    0.2070    0.2070]
+    //    
+    //      
+    // 
+    real_2d_array A = "[[-0.4440, 0, 0.4440, 0, 0.2],[0, -0.4440, 0, 0.4440, 0.1], [0.2070, 0.2070, 0.2070, 0.2070, 0]]"; 
+    real_1d_array AL = "[0,0,0]";
+    real_1d_array AU = AL;
+    real_1d_array C = "[0,0,0,0,-1]";
+    real_1d_array S = "[0.05,0.05,0.05,0.05,2]";
+    real_1d_array BndL = "[-0.3491,-0.3491,-0.3491,-0.3491,0]";
+    real_1d_array BndU = "[+0.3491,+0.3491,+0.3491,+0.3491,+inf]";
+    real_1d_array X;
+    minlpstate STATE;
+    minlpreport REP;
+    double eps=1E-6;
 
-    //
-    // Set scale of the parameters.
-    //
-    // It is strongly recommended that you set scale of your variables.
-    // Knowing their scales is essential for evaluation of stopping criteria
-    // and for preconditioning of the algorithm steps.
-    // You can find more information on scaling at http://www.alglib.net/optimization/scaling.php
-    //
-        // minlpsetscale(state, s);
+    minlpcreate(5, STATE);
+    minlpsetcost(STATE, C);
+    minlpsetbc(STATE, BndL, BndU);
+    minlpsetlc2dense(STATE, A, AL, AU, 3);
+    minlpsetscale(STATE, S);
+    minlpsetalgodss(STATE, eps);// faster
 
     // Solve
-        // minlpoptimize(state);
-        // minlpresults(state, x, rep);
-        // printf("%s\n", x.tostring(3).c_str()); // EXPECTED: [0,1]
+    auto start = std::chrono::high_resolution_clock::now();
+    minlpoptimize(STATE);
+    minlpresults(STATE, X, REP);
+    auto finish = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> elapsed = finish - start;
+    std::cout << "firstly execution time: " << elapsed.count() << "s\n";
+
+    float u_all[4]={ 0.0,  0.0,   0.0,   0.0};
+    size_t array_size = sizeof(u_all) / sizeof(u_all[0]);
 
 
-    // % (c) mengchaoheng
-    // % Last edited 2024-03
-    // %   min z=c*x   subj. to  A*x (=、 >=、 <=) b
-    // %   x 
-    // % 原问题
-    // % Performs direct control allocation by solving the LP
-    // %   max z=a   subj. to  Bu = av
-    // %   a,u               umin <= u <= umax
-    // % If a > 1, set u = u/a.
-    // % Note: This function has not been optimized for speed.
-    // %  Inputs:
-    // %  -------
-    // % B     control effectiveness matrix (k x m)
-    // % v     commanded virtual control (k x 1)
-    // % umin  lower position limits (m x 1)
-    // % umax  upper position limits (m x 1)
-    // %  Outputs:
-    // %  -------
-    // % u     optimal control (m x 1)
-    // % a     scaling factor  
-    // %% 整理成
-    // %   min z=[0 -1]x   subj. to  [B -v]x = 0
-    // %   x                       [I; -I]x <= [umax; Inf; -umin; 0] 
-    // %   其中 x=[u; a]
-    // % 对应《凸优化》p139,记为
-    // %   min z=c*x   subj. to  Aeq*x = beq
-    // %   x                     G*x <= h
-    // But for using ALGLIB, the statement is:
-    // %   min z=[0 -1]x   
-    // %   subj. to  [B -v]x = 0  
-    //             [umin; 0] <=x <= [umax; Inf] 
-    // Variable is x=[u; a].
-    // If a > 1, set u = u/a, 
-    // B=[-0.5     0       0.5     0;
-    //     0      -0.5     0       0.5;
-    //     0.25    0.25    0.25    0.25];
-        const float _B[3][4] = { {-0.5,0.0,0.5,0.0}, {0.0,-0.5,0.0,0.5},{0.25,0.25,0.25,0.25}};
-        float B[12];
-        for (int i = 0; i < 3; i++)
-        {
-            for(int j=0;j<4;j++)
-            {
-                B[i+3*j] = _B[i][j];
-            }
-        }
-        real_2d_array A = "[[-0.5, 0, 0.5, 0, 0.2],[0, -0.5, 0, 0.5, 0.1], [0.25, 0.25, 0.25, 0.25, 0]]"; 
-        real_1d_array AL = "[0,0,0]";
-        real_1d_array AU = AL;
-        real_1d_array C = "[0,0,0,0,-1]";
-        real_1d_array S = "[0.05,0.05,0.05,0.05,2]";
-        real_1d_array BndL = "[-0.3491,-0.3491,-0.3491,-0.3491,0]";
-        real_1d_array BndU = "[+0.3491,+0.3491,+0.3491,+0.3491,+inf]";
-        real_1d_array X;
-        minlpstate STATE;
-        minlpreport REP;
-        double eps=1E-6;
-
-        minlpcreate(5, STATE);
-        minlpsetcost(STATE, C);
-        minlpsetbc(STATE, BndL, BndU);
-        minlpsetlc2dense(STATE, A, AL, AU, 3);
-        minlpsetscale(STATE, S);
-        minlpsetalgodss(STATE, eps);// faster
-
-        // Solve
-        auto start = std::chrono::high_resolution_clock::now();
-        minlpoptimize(STATE);
-        minlpresults(STATE, X, REP);
-        auto finish = std::chrono::high_resolution_clock::now();
-        std::chrono::duration<double> elapsed = finish - start;
-        std::cout << "firstly execution time: " << elapsed.count() << "s\n";
-
-
+    for(int i=0;i<num;i++)
+	{
         // Solve again
-        real_1d_array minus_v = "[0.2, 0.1, 0.1]"; //v= -[0.2 0.1 0.1];
-        A[0][4]=minus_v[0];
-        A[1][4]=minus_v[1];
-        A[2][4]=minus_v[2];
+        // real_1d_array minus_v = "[0.2, 0.1, 0.1]"; 
+        // -v
+        A[0][4]=-data[i][0];
+        A[1][4]=-data[i][1];
+        A[2][4]=-data[i][2];
         minlpsetlc2dense(STATE, A, AL, AU, 3);
 
         start = std::chrono::high_resolution_clock::now();
@@ -195,22 +150,18 @@ int main(int argc, char **argv)
         alglib::real_1d_array delta;
         delta.setcontent(4,tmp);
         printf("delta is: %s\n", delta.tostring(4).c_str());
-        float y_all1[3]={ -0.2,  -0.1,   -0.0};
-        float y_all[3]={ -0.2,  -0.1,   -0.1};
-        float u_all[4]={ 0.0,  0.0,   0.0,   0.0};;
+        float y_all[3]={(float) data[i][0],  (float) data[i][1],   (float) data[i][2]};
+        
         float z_all= 0.0;
         unsigned int iters_all= 0;
         float _uMin[4] ={};
-	    float _uMax[4] ={};
+        float _uMax[4] ={};
         for (int i = 0; i < 4; i++)
-		{
-			_uMin[i] =  -0.3491;
-			_uMax[i] =  0.3491;
-		}
-        // dir_alloc_sim(y_all1, _uMin, _uMax, u_all, &z_all, &iters_all);
-        allocator_dir_LPwrap_4(B, y_all1, _uMin, _uMax, u_all, &z_all, &iters_all);
+        {
+            _uMin[i] =  -0.3491;
+            _uMax[i] =  0.3491;
+        }
         start = std::chrono::high_resolution_clock::now();
-        // dir_alloc_sim(y_all, _uMin, _uMax, u_all, &z_all, &iters_all);
         allocator_dir_LPwrap_4(B, y_all, _uMin, _uMax, u_all, &z_all, &iters_all);
         finish = std::chrono::high_resolution_clock::now();
         elapsed = finish - start;
@@ -222,12 +173,18 @@ int main(int argc, char **argv)
         }
         std::cout << std::endl; 
 
+        // 写入CSV文件
+        for (size_t i = 0; i < array_size; ++i) {
+            outFile << u_all[i] << (i < array_size - 1 ? "," : "\n");
+        }
+    }
+    // 关闭文件
+    outFile.close();
 
-    // }
-    // catch(alglib::ap_error alglib_exception)
-    // {
-    //     printf("ALGLIB exception with message '%s'\n", alglib_exception.msg.c_str());
-    //     return 1;
-    // }
+    // 释放内存
+    for (size_t i = 0; i < data.size(); ++i) {
+        delete[] array[i];
+    }
+    delete[] array;
     return 0;
 }

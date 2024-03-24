@@ -64,7 +64,7 @@ test_LPWrap,
 ```Console
 $ g++ -I ../src/alglib-cpp/src/ -o LPWrap_test.out  ../src/LPWrap/*.cpp ../src/LPWrap/*.c ../src/alglib-cpp/src/*.cpp -w  -O3
 
-$ 
+$ ./LPWrap_test.out
 ```
 
 
