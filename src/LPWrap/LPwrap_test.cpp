@@ -21,7 +21,7 @@ using namespace alglib;
 
 int main(int argc, char **argv)
 {
-    std::ifstream file("../../data.csv");
+    std::ifstream file("../../../../data.csv");
     std::vector<std::vector<double> > data;
     std::string line;
  
