@@ -63,7 +63,7 @@ a
 test_LPWrap, 
 ```Console
 $ cd build
-$ g++ -I ../src/alglib-cpp/src/ -o LPWrap_test.out  ../src/LPWrap/*.cpp ../src/LPWrap/*.c ../src/alglib-cpp/src/*.cpp -w  -O3
+$ g++ -I ../src/alglib-cpp/src/ -o LPWrap_test.out  ../src/LPwrap/*.cpp ../src/LPwrap/*.c ../src/alglib-cpp/src/*.cpp -w  -O3
 
 $ ./LPWrap_test.out
 ```
